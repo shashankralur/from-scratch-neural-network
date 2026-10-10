@@ -1,7 +1,15 @@
 w = 3
 
-def neuron(x):
+def neuron(w, x):
     return w * x
 
 
-print(neuron(3))
+# predict the error
+x = 2
+y = 6
+
+prediction = neuron(x)
+
+error = prediction - y
+print("prediction:", prediction)
+print("error:", error)
