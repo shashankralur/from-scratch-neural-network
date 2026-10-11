@@ -1,18 +1,14 @@
 x = 2
 y = 6
-w = 2
+w = 1
 
-prediction = w * x
-error = prediction - y
-
-print("w:", w, "prediction:", prediction, "error:", error)
-
-if error < 0:
-    w = w + 1
-elif error > 0:
-    w = w - 1
-    
-prediction = w * x
-error = prediction - y
-
-print("after:   w =", w, " error =", error)
+for step in range(5):
+    prediction = w * x
+    error = prediction - y
+    print(f"step {step} and prediction: {prediction} and error is {error}")
+    if error < 0:
+        w = w + 1
+    elif error > 0:
+        w = w - 1
+    else:
+        print(f"Found perfect at w = {w}")
