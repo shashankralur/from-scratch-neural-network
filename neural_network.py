@@ -12,3 +12,4 @@ for step in range(5):
         w = w - 1
     else:
         print(f"Found perfect at w = {w}")
+        break
