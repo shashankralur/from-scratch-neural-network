@@ -1,12 +1,8 @@
-x = 2
-y = 10
-w = 1
+w = 5
+data = [(1, 3), (2, 6), (3, 9)]
 
-for step in range(5):
+for x, y in data:
     prediction = w * x
     error = prediction - y
-    print(f"step {step}: w = {w}, prediction = {prediction}, error = {error}")
-    if error == 0:
-        print(f"Found perfect at w = {w}")
-        break
+    print(f"x = {x}, y = {y}, w = {w}, prediction = {prediction}, error = {error}")
     w = w - error / x
