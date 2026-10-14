@@ -1,5 +1,11 @@
-## Neural Networks From Scratch
+# Neural Lab
 
-This project is mainly to learn the how Neural networks works under the hood.
+Terminal 1 (backend):
+    cd backend
+    python -m venv .venv && source .venv/bin/activate
+    pip install -r requirements.txt
+    uvicorn main:app --reload --port 8000
 
-Also adding frontend for visualization to understand this.
+Terminal 2 (frontend):
+    npm install
+    npm run dev
