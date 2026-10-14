@@ -1,95 +1,83 @@
-# Backend: the neuron lives here in plain Python (same code as our lessons).
+# API layer: thin wrappers around neuron.py. All the learning logic is in neuron.py.
 import math
-from typing import List
 from fastapi import FastAPI
-from pydantic import BaseModel
+import neuron as N
 
 app = FastAPI()
+LIMIT = 5000
 
 
-class Point(BaseModel):
-    x: float
-    y: float
+def blown(history, *params):
+    vals = [history[-1] if history else 0, *params]
+    return any(not math.isfinite(v) or abs(v) > 1e6 for v in vals)
 
 
-class ForwardIn(BaseModel):
-    w: float
-    x: float
-
-
-class ErrorIn(ForwardIn):
-    y: float
-
-
-class StepIn(ErrorIn):
-    lr: float
-
-
-class DataIn(BaseModel):
-    w: float
-    data: List[Point]
-
-
-class TrainIn(DataIn):
-    lr: float
-    epochs: int
-
-
-# ---- the neuron, built piece by piece ----
-def neuron(w, x):
-    return w * x                       # Lesson 1
-
-
-def get_error(w, x, y):
-    return neuron(w, x) - y            # Lesson 2
-
-
-def update(w, x, y, lr):
-    error = get_error(w, x, y)
-    slope = error * x                  # Lesson 3/4: error moves by x
-    return w - lr * slope, error, slope
-
-
-# ---- API ----
 @app.get("/api/health")
 def health():
     return {"ok": True}
 
 
 @app.post("/api/forward")
-def forward(b: ForwardIn):
-    return {"prediction": neuron(b.w, b.x)}
+def forward(b: dict):
+    return {"prediction": N.neuron(b["w"], b["x"]) + b.get("b", 0)}
 
 
 @app.post("/api/error")
-def error(b: ErrorIn):
-    e = get_error(b.w, b.x, b.y)
-    direction = "up" if e < 0 else "down" if e > 0 else "stay"
-    return {"prediction": neuron(b.w, b.x), "error": e, "direction": direction}
+def error(b: dict):
+    e = N.error(b["w"], b["x"], b["y"])
+    return {"prediction": N.neuron(b["w"], b["x"]), "error": e,
+            "direction": "up" if e < 0 else "down" if e > 0 else "stay"}
+
+
+@app.post("/api/loss-curve")
+def loss_curve(b: dict):
+    lo, hi, x, y = b["lo"], b["hi"], b["x"], b["y"]
+    curve = [[lo + (hi - lo) * i / 80, N.loss(lo + (hi - lo) * i / 80, x, y)] for i in range(81)]
+    return {"curve": curve, "loss": N.loss(b["w"], x, y), "error": N.error(b["w"], x, y)}
 
 
 @app.post("/api/step")
-def step(b: StepIn):
-    new_w, e, slope = update(b.w, b.x, b.y, b.lr)
-    if not math.isfinite(new_w):
-        new_w = b.w
-    return {"w": new_w, "prediction": neuron(b.w, b.x), "error": e, "slope": slope}
+def step(b: dict):
+    w, x, y, lr = b["w"], b["x"], b["y"], b["lr"]
+    e = N.error(w, x, y)
+    return {"w": N.step(w, x, y, lr), "loss": N.loss(w, x, y), "error": e, "slope": e * x}
+
+
+@app.post("/api/train-one")
+def train_one(b: dict):
+    return {"history": N.train_one(b["w"], b["x"], b["y"], b["lr"], min(b["steps"], LIMIT))}
 
 
 @app.post("/api/train")
-def train(b: TrainIn):
-    w, diverged = b.w, False
-    for _ in range(max(0, min(b.epochs, 5000))):
-        for p in b.data:
-            w, _, _ = update(w, p.x, p.y, b.lr)
-        if abs(w) > 1e9:               # learning rate too big
-            diverged = True
-            break
-    return {"w": b.w if diverged else w, "diverged": diverged}
+def train(b: dict):
+    w, h = N.train(b["w"], b["data"], b["lr"], min(b["epochs"], LIMIT))
+    return {"w": w, "history": h, "diverged": blown(h, w)}
 
 
-@app.post("/api/evaluate")
-def evaluate(b: DataIn):
-    preds = [neuron(b.w, p.x) for p in b.data]
-    loss = sum((q - p.y) ** 2 for q, p in zip(preds, b.data))
-    return {"predictions": preds, "loss": loss}
+@app.post("/api/train-b")
+def train_b(b: dict):
+    w, bias, h = N.train_b(b["w"], b["b"], b["data"], b["lr"], min(b["epochs"], LIMIT), b.get("use_bias", True))
+    return {"w": w, "b": bias, "history": h, "diverged": blown(h, w, bias)}
+
+
+@app.post("/api/train-n")
+def train_n(b: dict):
+    rows = list(zip(b["xs"], b["ys"]))
+    fn = N.train_s if b.get("activation") == "sigmoid" else N.train_n
+    ws, bias, h = fn(b["ws"], b["b"], rows, b["lr"], min(b["epochs"], LIMIT))
+    return {"ws": ws, "b": bias, "history": h, "diverged": blown(h, *ws, bias)}
+
+
+@app.post("/api/predict-batch")
+def predict_batch(b: dict):
+    act = b.get("activation", "none")
+    zs = [N.neuron_n(b["ws"], b.get("b", 0), xs) for xs in b["xs"]]
+    preds = [N.sigmoid(z) if act == "sigmoid" else z for z in zs]
+    loss = sum(0.5 * (p - y) ** 2 for p, y in zip(preds, b.get("ys", [])))
+    return {"zs": zs, "predictions": preds, "loss": loss}
+
+
+@app.post("/api/sigmoid")
+def sigmoid(b: dict):
+    lo, hi = b["lo"], b["hi"]
+    return {"curve": [[lo + (hi - lo) * i / 100, N.sigmoid(lo + (hi - lo) * i / 100)] for i in range(101)]}
